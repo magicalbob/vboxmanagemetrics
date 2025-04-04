@@ -32,13 +32,18 @@ def get_metrics():
 
 @app.route('/')
 def index():
-    return jsonify({
+    response = {
         "name": "vbox-metrics-exporter",
         "description": "Exports VirtualBox VM metrics in Prometheus format",
         "version": "0.1.0",
         "author": "ellisbs",
         "tagline": "You know, for metrics"
-    })
+    }
+    return app.response_class(
+        response=app.json.dumps(response, indent=2) + "\n",
+        status=200,
+        mimetype='application/json'
+    )
 
 @app.route('/metrics')
 def metrics():

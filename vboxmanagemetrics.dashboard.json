@@ -1,0 +1,89 @@
+{
+  "id": null,
+  "title": "VBoxManager Metrics",
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Host CPU Idle (%)",
+      "targets": [
+        {
+          "expr": "vbox_host_cpu_load_idle",
+          "legendFormat": "{{host}}",
+          "interval": "",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Host RAM Usage (Bytes)",
+      "targets": [
+        {
+          "expr": "vbox_host_ram_usage_used_bytes",
+          "legendFormat": "Used - {{host}}",
+          "refId": "A"
+        },
+        {
+          "expr": "vbox_host_ram_usage_total_bytes",
+          "legendFormat": "Total - {{host}}",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Guest CPU Load (User + Kernel)",
+      "targets": [
+        {
+          "expr": "vbox_guest_cpu_load_user + vbox_guest_cpu_load_kernel",
+          "legendFormat": "{{vm}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Guest RAM Usage (Bytes)",
+      "targets": [
+        {
+          "expr": "vbox_guest_ram_usage_used",
+          "legendFormat": "Used - {{vm}}",
+          "refId": "A"
+        },
+        {
+          "expr": "vbox_guest_ram_usage_total",
+          "legendFormat": "Total - {{vm}}",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    }
+  ]
+}

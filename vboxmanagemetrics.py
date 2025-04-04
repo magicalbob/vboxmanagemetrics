@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from flask import Flask, Response
+from flask import Flask, Response, jsonify
 import subprocess
 import argparse
 
@@ -29,6 +29,16 @@ def get_metrics():
         return '\n'.join(metrics) + '\n'
     except subprocess.CalledProcessError:
         return "# Error fetching VBox metrics\n"
+
+@app.route('/')
+def index():
+    return jsonify({
+        "name": "vbox-metrics-exporter",
+        "description": "Exports VirtualBox VM metrics in Prometheus format",
+        "version": "0.1.0",
+        "author": "ellisbs",
+        "tagline": "You know, for metrics"
+    })
 
 @app.route('/metrics')
 def metrics():

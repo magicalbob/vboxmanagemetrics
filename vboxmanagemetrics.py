@@ -3,6 +3,7 @@
 from flask import Flask, Response, jsonify
 import subprocess
 import socket
+import re
 import argparse
 
 app = Flask(__name__)
@@ -10,25 +11,45 @@ app = Flask(__name__)
 # Get hostname for labels
 HOSTNAME = socket.gethostname()
 
+def normalize_metric_name(metric_name):
+    """Convert VBox metric name to Prometheus format"""
+    # Replace special characters and convert to lowercase
+    name = metric_name.lower().replace('/', '_').replace(':', '_')
+    # Remove parentheses and replace with underscores
+    name = re.sub(r'[{}()]', '_', name)
+    # Replace multiple underscores with a single one
+    name = re.sub(r'_+', '_', name)
+    # Remove leading/trailing underscores
+    return name.strip('_')
+
+def parse_value(value_str):
+    """Parse different value formats into numeric values"""
+    if value_str.endswith('%'):
+        return float(value_str.strip('%'))
+    elif value_str.endswith('MB'):
+        return float(value_str.strip('MB')) * 1024 * 1024
+    elif value_str.endswith('kB'):
+        return float(value_str.strip('kB')) * 1024
+    elif value_str.endswith('B/s'):
+        return float(value_str.strip('B/s'))
+    elif value_str.endswith('mbit/s'):
+        return float(value_str.strip('mbit/s'))
+    elif value_str.endswith('MHz'):
+        return float(value_str.strip('MHz'))
+    else:
+        try:
+            return float(value_str)
+        except ValueError:
+            return None
+
 def get_metrics():
     metrics = []
     
-    # List of metrics to collect - add more as needed
-    metric_groups = [
-        "Guest/CPU/Load/User:avg",
-        "Guest/CPU/Load/System:avg",
-        "Guest/CPU/Load/Idle:avg",
-        "Guest/RAM/Usage/Used:avg",
-        "Guest/RAM/Usage/Free:avg",
-        "Host/CPU/Load:avg",
-        "Host/RAM/Usage/Used:avg",
-        "Host/RAM/Usage/Free:avg",
-        "Guest/Network/Rate/Rx:avg",
-        "Guest/Network/Rate/Tx:avg"
-    ]
-    
-    # Get VM info first to add better labels
     try:
+        # Add host info metric
+        metrics.append(f'vbox_info{{hostname="{HOSTNAME}"}} 1')
+        
+        # Get VM info for better labels
         vm_info = {}
         vms_output = subprocess.check_output(["VBoxManage", "list", "vms"], 
                                           stderr=subprocess.DEVNULL).decode()
@@ -37,53 +58,70 @@ def get_metrics():
                 name = line.split('"')[1]
                 uuid = line.split('{')[1].split('}')[0]
                 vm_info[name] = uuid
+        
+        # Get all metrics at once for efficiency
+        output = subprocess.check_output(["VBoxManage", "metrics", "query", "*"], 
+                                      stderr=subprocess.DEVNULL).decode()
+        
+        # Process each line of output
+        lines = output.strip().split('\n')
+        for line in lines:
+            parts = line.split(None, 2)  # Split into max 3 parts
+            if len(parts) == 3:
+                object_name, metric_name, value_str = parts
                 
-        # Add host metric
-        metrics.append(f'vbox_info{{hostname="{HOSTNAME}"}} 1')
-    
-        # Get metrics for each group
-        for metric_group in metric_groups:
-            try:
-                output = subprocess.check_output([
-                    "VBoxManage", "metrics", "query", "*", metric_group
-                ], stderr=subprocess.DEVNULL).decode()
+                # Parse value into appropriate numeric type
+                value = parse_value(value_str)
+                if value is None:
+                    continue  # Skip if value couldn't be parsed
                 
-                lines = output.strip().split('\n')
-                for line in lines[1:]:  # Skip header
-                    parts = line.split()
-                    if len(parts) >= 3:
-                        vm = parts[0]
-                        metric = parts[1]
-                        value = parts[2]
-                        
-                        # Handle different metric formats (%, KB, B/s, etc.)
-                        if value.endswith('%'):
-                            value = float(value.strip('%'))
-                        elif value.endswith('MB'):
-                            value = float(value.strip('MB')) * 1024 * 1024
-                        elif value.endswith('KB'):
-                            value = float(value.strip('KB')) * 1024
-                        elif value.endswith('B/s'):
-                            value = float(value.strip('B/s'))
-                        else:
-                            try:
-                                value = float(value)
-                            except ValueError:
-                                continue
-                        
-                        # Format the metric name for Prometheus
-                        metric_name = metric.lower().replace('/', '_').replace(':', '')
-                        # Get VM UUID if possible
-                        uuid = vm_info.get(vm, "unknown")
-                        
-                        # Add formatted metric
-                        metrics.append(f'vbox_{metric_name}{{vm="{vm}", vm_uuid="{uuid}", host="{HOSTNAME}"}} {value}')
-            except subprocess.CalledProcessError:
-                # Skip if this metric group fails
-                continue
+                # Generate appropriate labels
+                labels = {}
+                
+                if object_name == "host":
+                    # Host metrics
+                    labels["host"] = HOSTNAME
+                    
+                    # Handle special cases for network interfaces
+                    if metric_name.startswith("Net/"):
+                        interface = metric_name.split("/")[1]
+                        labels["interface"] = interface
+                        metric_type = "/".join(metric_name.split("/")[2:])
+                        metric_name = f"host_net_{normalize_metric_name(metric_type)}"
+                    # Handle special cases for disk metrics
+                    elif metric_name.startswith("Disk/"):
+                        disk = metric_name.split("/")[1]
+                        labels["disk"] = disk
+                        metric_type = "/".join(metric_name.split("/")[2:])
+                        metric_name = f"host_disk_{normalize_metric_name(metric_type)}"
+                    # Handle special cases for filesystem metrics
+                    elif metric_name.startswith("FS/"):
+                        fs = metric_name.split("/")[1].replace("{", "").replace("}", "")
+                        labels["filesystem"] = fs
+                        metric_type = "/".join(metric_name.split("/")[3:])
+                        metric_name = f"host_fs_{normalize_metric_name(metric_type)}"
+                    else:
+                        # Regular host metrics
+                        metric_name = f"host_{normalize_metric_name(metric_name)}"
+                else:
+                    # VM metrics
+                    labels["vm"] = object_name
+                    labels["host"] = HOSTNAME
+                    
+                    # Add UUID if available
+                    if object_name in vm_info:
+                        labels["vm_uuid"] = vm_info[object_name]
+                    
+                    metric_name = f"guest_{normalize_metric_name(metric_name)}"
+                
+                # Format labels for Prometheus
+                labels_str = ",".join([f'{k}="{v}"' for k, v in labels.items()])
+                
+                # Add formatted metric
+                metrics.append(f'vbox_{metric_name}{{{labels_str}}} {value}')
     
-    except subprocess.CalledProcessError:
-        return "# Error fetching VBox metrics\n"
+    except subprocess.CalledProcessError as e:
+        return f"# Error fetching VBox metrics: {str(e)}\n"
     
     return '\n'.join(metrics) + '\n'
 
@@ -92,7 +130,7 @@ def index():
     response = {
         "name": "vbox-metrics-exporter",
         "description": "Exports VirtualBox VM metrics in Prometheus format",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "author": "ellisbs",
         "hostname": HOSTNAME,
         "tagline": "You know, for metrics"

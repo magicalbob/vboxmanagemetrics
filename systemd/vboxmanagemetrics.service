@@ -1,0 +1,17 @@
+[Unit]
+Description=VirtualBox Metrics Monitor
+After=network.target
+
+[Service]
+Type=simple
+User=ian
+Group=ian
+WorkingDirectory=/home/ian/Documents/src/vboxmanagemetrics
+ExecStart=/bin/bash /home/ian/Documents/src/vboxmanagemetrics/vboxmanagemetrics.sh
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

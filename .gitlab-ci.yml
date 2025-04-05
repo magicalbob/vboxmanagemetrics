@@ -69,7 +69,7 @@ docker_build_job:
     GIT_STRATEGY: clone
 
 trivy_scan_job:
-  image: docker.ellisbs.co.uk:5190/ubuntu:24.04
+  image: docker.ellisbs.co.uk:5190/ubuntu:24.04a
   stage: security-scan
   tags:
     - linux

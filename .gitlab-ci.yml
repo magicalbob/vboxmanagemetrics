@@ -2,11 +2,10 @@ stages:
  - test
  - scan
  - docker-build
-
+ - security-scan
 variables:
   SONAR_SCANNER_VERSION: 5.0.1.3006
   GIT_DEPTH: "0"
-
 test_job:
   image: docker.ellisbs.co.uk:5190/ubuntu:24.04
   stage: test
@@ -21,13 +20,12 @@ test_job:
     - pip install pytest pytest-cov coverage
     - coverage run -m pytest tests/
     - coverage xml
-    - rm -rf __pycache__
+    - rm -rf **pycache**
   artifacts:
     paths:
       - coverage.xml
   variables:
     GIT_STRATEGY: clone
-
 scan_job:
   image: docker.ellisbs.co.uk:5190/ubuntu:24.04
   stage: scan
@@ -46,7 +44,6 @@ scan_job:
       - coverage.xml
   variables:
     GIT_STRATEGY: clone
-
 docker_build_job:
   image: docker.ellisbs.co.uk:5190/ubuntu:24.04
   stage: docker-build
@@ -64,5 +61,34 @@ docker_build_job:
     - echo "Building and pushing image with tag $TIMESTAMP"
     - docker build -t docker.ellisbs.co.uk:7070/vboxmanagemetrics:$TIMESTAMP .
     - docker push docker.ellisbs.co.uk:7070/vboxmanagemetrics:$TIMESTAMP
+    - echo "DOCKER_IMAGE_TAG=$TIMESTAMP" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+  variables:
+    GIT_STRATEGY: clone
+
+trivy_scan_job:
+  image: docker.ellisbs.co.uk:5190/ubuntu:24.04
+  stage: security-scan
+  tags:
+    - linux
+  script:
+    - sudo apt update
+    - sudo apt install -y wget apt-transport-https gnupg lsb-release
+    - wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+    - echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+    - sudo apt update
+    - sudo apt install -y trivy
+    - echo "$DOCKER_PASSWORD" | docker login docker.ellisbs.co.uk:7070 -u "$DOCKER_USERNAME" --password-stdin
+    - trivy image --exit-code 0 --format json --output trivy-results.json docker.ellisbs.co.uk:7070/vboxmanagemetrics:$DOCKER_IMAGE_TAG
+    - trivy image --exit-code 0 --severity HIGH,CRITICAL docker.ellisbs.co.uk:7070/vboxmanagemetrics:$DOCKER_IMAGE_TAG
+  dependencies:
+    - docker_build_job
+  artifacts:
+    paths:
+      - trivy-results.json
+    expire_in: 1 week
+    when: always
   variables:
     GIT_STRATEGY: clone

@@ -45,6 +45,19 @@ def parse_value(value_str):
         except ValueError:
             return None
 
+def get_vm_info():
+        # Get VM info for better labels
+        vm_info = {}
+        vms_output = subprocess.check_output(["VBoxManage", "list", "vms"],
+                                          stderr=subprocess.DEVNULL).decode()
+        for line in vms_output.strip().split('\n'):
+            if '"' in line and '{' in line:
+                name = line.split('"')[1]
+                uuid = line.split('{')[1].split('}')[0]
+                vm_info[name] = uuid
+
+        return vm_info
+
 def get_metrics():
     metrics = []
     
@@ -53,14 +66,7 @@ def get_metrics():
         metrics.append(f'vbox_info{{hostname="{HOSTNAME}"}} 1')
         
         # Get VM info for better labels
-        vm_info = {}
-        vms_output = subprocess.check_output(["VBoxManage", "list", "vms"], 
-                                          stderr=subprocess.DEVNULL).decode()
-        for line in vms_output.strip().split('\n'):
-            if '"' in line and '{' in line:
-                name = line.split('"')[1]
-                uuid = line.split('{')[1].split('}')[0]
-                vm_info[name] = uuid
+        vm_info = get_vm_info()
         
         # Get all metrics at once for efficiency
         output = subprocess.check_output(["VBoxManage", "metrics", "query", "*"], 

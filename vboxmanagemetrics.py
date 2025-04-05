@@ -38,6 +38,9 @@ def parse_value(value_str):
         return float(value_str.strip('MHz'))
     else:
         try:
+            # Handle "NaN" case specially
+            if value_str.lower() == "nan":
+                return None
             return float(value_str)
         except ValueError:
             return None

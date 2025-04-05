@@ -45,6 +45,9 @@ def parse_value(value_str):
         except ValueError:
             return None
 
+def get_info_metric():
+    return f'vbox_info{{hostname="{HOSTNAME}"}} 1'
+
 def get_vm_info():
         # Get VM info for better labels
         vm_info = {}
@@ -63,7 +66,7 @@ def get_metrics():
     
     try:
         # Add host info metric
-        metrics.append(f'vbox_info{{hostname="{HOSTNAME}"}} 1')
+        metrics.append(get_info_metric())
         
         # Get VM info for better labels
         vm_info = get_vm_info()

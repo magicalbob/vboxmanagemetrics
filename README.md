@@ -85,6 +85,17 @@ And basic application information at:
 http://<your-server-ip>:9200/
 ```
 
+## Prometheus
+
+Add a target to your prometheis config map something like this:
+
+static_configs:\n      - targets: ['192.168.0.16:9200']\n    metrics_path:
+    '/metrics'\n    scheme: http\n    honor_labels: true\n
+
+## Grafana
+
+Dashboard JSON `vboxmanagemetrics.dashboard.json` is included.
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for more information.

@@ -56,17 +56,10 @@ docker_build_job:
     - sudo apt update
     - sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
     - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-    - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"  
+    - sudo add-apt-repository -y "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
     - sudo apt update 
     - sudo apt install -y docker-ce docker-ce-cli containerd.io
     - echo "$DOCKER_PASSWORD" | docker login docker.ellisbs.co.uk:7070 -u "$DOCKER_USERNAME" --password-stdin
-    - export TIMESTAMP=$(date +%Y.%m.%d.%H.%M.%S)
-    - echo "Building and pushing image with tag $TIMESTAMP"
-    - docker build -t docker.ellisbs.co.uk:7070/vboxmanagemetrics:$TIMESTAMP .
-    - docker push docker.ellisbs.co.uk:7070/vboxmanagemetrics:$TIMESTAMP
-  before_script:
-    - echo "$DOCKER_PASSWORD" | docker login docker.ellisbs.co.uk:7070 -u "$DOCKER_USERNAME" --password-stdin
-  script:
     - export TIMESTAMP=$(date +%Y.%m.%d.%H.%M.%S)
     - echo "Building and pushing image with tag $TIMESTAMP"
     - docker build -t docker.ellisbs.co.uk:7070/vboxmanagemetrics:$TIMESTAMP .

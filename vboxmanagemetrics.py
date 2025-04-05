@@ -63,79 +63,85 @@ def get_vm_info():
 
 def get_metrics():
     metrics = []
-    
+
     try:
         # Add host info metric
-        metrics.append(get_info_metric())
-        
-        # Get VM info for better labels
+        metrics.append(f'vbox_info{{hostname="{HOSTNAME}"}} 1')
+
+        # Fetch VM info for labels
         vm_info = get_vm_info()
-        
-        # Get all metrics at once for efficiency
+
+        # Fetch all VBox metrics
         output = subprocess.check_output(["VBoxManage", "metrics", "query", "*"], 
-                                      stderr=subprocess.DEVNULL).decode()
-        
-        # Process each line of output
-        lines = output.strip().split('\n')
-        for line in lines:
-            parts = line.split(None, 2)  # Split into max 3 parts
-            if len(parts) == 3:
-                object_name, metric_name, value_str = parts
-                
-                # Parse value into appropriate numeric type
-                value = parse_value(value_str)
-                if value is None:
-                    continue  # Skip if value couldn't be parsed
-                
-                # Generate appropriate labels
-                labels = {}
-                
-                if object_name == "host":
-                    # Host metrics
-                    labels["host"] = HOSTNAME
-                    
-                    # Handle special cases for network interfaces
-                    if metric_name.startswith("Net/"):
-                        interface = metric_name.split("/")[1]
-                        labels["interface"] = interface
-                        metric_type = "/".join(metric_name.split("/")[2:])
-                        metric_name = f"host_net_{normalize_metric_name(metric_type)}"
-                    # Handle special cases for disk metrics
-                    elif metric_name.startswith("Disk/"):
-                        disk = metric_name.split("/")[1]
-                        labels["disk"] = disk
-                        metric_type = "/".join(metric_name.split("/")[2:])
-                        metric_name = f"host_disk_{normalize_metric_name(metric_type)}"
-                    # Handle special cases for filesystem metrics
-                    elif metric_name.startswith("FS/"):
-                        fs = metric_name.split("/")[1].replace("{", "").replace("}", "")
-                        labels["filesystem"] = fs
-                        metric_type = "/".join(metric_name.split("/")[3:])
-                        metric_name = f"host_fs_{normalize_metric_name(metric_type)}"
-                    else:
-                        # Regular host metrics
-                        metric_name = f"host_{normalize_metric_name(metric_name)}"
-                else:
-                    # VM metrics
-                    labels["vm"] = object_name
-                    labels["host"] = HOSTNAME
-                    
-                    # Add UUID if available
-                    if object_name in vm_info:
-                        labels["vm_uuid"] = vm_info[object_name]
-                    
-                    metric_name = f"guest_{normalize_metric_name(metric_name)}"
-                
-                # Format labels for Prometheus
-                labels_str = ",".join([f'{k}="{v}"' for k, v in labels.items()])
-                
-                # Add formatted metric
-                metrics.append(f'vbox_{metric_name}{{{labels_str}}} {value}')
-    
+                                          stderr=subprocess.DEVNULL).decode()
+
+        # Process metrics output
+        for line in output.strip().split('\n'):
+            process_metric_line(line, metrics, vm_info)
+
     except subprocess.CalledProcessError as e:
         return f"# Error fetching VBox metrics: {str(e)}\n"
-    
+
     return '\n'.join(metrics) + '\n'
+
+def get_vm_info():
+    """Fetch VM names and UUIDs from VBoxManage."""
+    vm_info = {}
+    vms_output = subprocess.check_output(["VBoxManage", "list", "vms"], 
+                                         stderr=subprocess.DEVNULL).decode()
+    for line in vms_output.strip().split('\n'):
+        if '"' in line and '{' in line:
+            name = line.split('"')[1]
+            uuid = line.split('{')[1].split('}')[0]
+            vm_info[name] = uuid
+    return vm_info
+
+def process_metric_line(line, metrics, vm_info):
+    """Process a single metric line and add it to the metrics list."""
+    parts = line.split(None, 2)  # Split into max 3 parts
+    if len(parts) != 3:
+        return
+
+    object_name, metric_name, value_str = parts
+    value = parse_value(value_str)
+    if value is None:
+        return
+
+    labels = {"host": HOSTNAME}
+    metric_prefix = "vbox_"
+
+    if object_name == "host":
+        labels = process_host_metric(metric_name, labels)
+        metric_name = f"{metric_prefix}host_{normalize_metric_name(metric_name)}"
+    else:
+        labels = process_vm_metric(object_name, labels, vm_info)
+        metric_name = f"{metric_prefix}guest_{normalize_metric_name(metric_name)}"
+
+    labels_str = ",".join([f'{k}="{v}"' for k, v in labels.items()])
+    metrics.append(f'{metric_name}{{{labels_str}}} {value}')
+
+def process_host_metric(metric_name, labels):
+    """Handle special cases for host metrics."""
+    if metric_name.startswith("Net/"):
+        interface = metric_name.split("/")[1]
+        labels["interface"] = interface
+        metric_name = f'host_net_{normalize_metric_name("/".join(metric_name.split("/")[2:]))}'
+    elif metric_name.startswith("Disk/"):
+        disk = metric_name.split("/")[1]
+        labels["disk"] = disk
+        metric_name = f'host_disk_{normalize_metric_name("/".join(metric_name.split("/")[2:]))}'
+    elif metric_name.startswith("FS/"):
+        fs = metric_name.split("/")[1].replace("{", "").replace("}", "")
+        labels["filesystem"] = fs
+        metric_name = f'host_fs_{normalize_metric_name("/".join(metric_name.split("/")[3:]))}'
+    return labels
+
+def process_vm_metric(object_name, labels, vm_info):
+    """Handle special cases for VM metrics."""
+    labels["vm"] = object_name
+    if object_name in vm_info:
+        labels["vm_uuid"] = vm_info[object_name]
+    return labels
 
 @app.route('/')
 def index():

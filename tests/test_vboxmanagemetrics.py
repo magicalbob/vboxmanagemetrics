@@ -44,7 +44,7 @@ class TestVBoxMetricsExporter(unittest.TestCase):
         
         for input_str, expected_output in test_cases:
             self.assertEqual(vboxmanagemetrics.parse_value(input_str), expected_output)
-    
+
     @patch('subprocess.check_output')
     def test_get_metrics_success(self, mock_check_output):
         # Mock the VM list output
@@ -75,18 +75,15 @@ class TestVBoxMetricsExporter(unittest.TestCase):
         # Call the function
         metrics = vboxmanagemetrics.get_metrics()
         
-        # Verify the output contains expected metrics - be more flexible with label order
+        # Verify the output contains expected metrics
         self.assertIn('vbox_info{hostname="test-host"} 1', metrics)
         self.assertIn('vbox_host_cpu_load_user{host="test-host"} 1.56', metrics)
         self.assertIn('vbox_host_ram_usage_used{host="test-host"} 4194304.0', metrics)  # 4096 * 1024
-        self.assertIn('vbox_host_net_load_rx{', metrics)
-        self.assertIn('host="test-host"', metrics)
-        self.assertIn('interface="eth0"', metrics)
-        self.assertIn('5.5', metrics)
-        # Be more flexible with label order
-        self.assertIn('vbox_host_disk_usage_total{', metrics)
-        self.assertIn('disk="sda"', metrics)
-        self.assertIn('104857600.0', metrics)  # 100 * 1024 * 1024
+        self.assertIn('vbox_host_net_eth0_load_rx{host="test-host",interface="eth0"} 5.5', metrics)
+        self.assertIn('vbox_host_disk_sda_usage_total{host="test-host",disk="sda"} 104857600.0', metrics)
+        self.assertIn('vbox_host_fs_usage_free{host="test-host",filesystem=""} 209715200.0', metrics)
+        self.assertIn('vbox_guest_cpu_load_user{host="test-host",vm="test-vm1",vm_uuid="uuid1"} 10.5', metrics)
+        self.assertIn('vbox_guest_ram_usage_used{host="test-host",vm="test-vm2",vm_uuid="uuid2"} 2097152.0', metrics)  # 2048 * 1024
     
     @patch('subprocess.check_output')
     def test_get_metrics_error(self, mock_check_output):

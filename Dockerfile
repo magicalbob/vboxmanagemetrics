@@ -1,20 +1,27 @@
-# Use a lightweight Python base image
+# Use your custom Python base image
 FROM docker.ellisbs.co.uk:5190/python:3.13
 
-# Set workdir inside container
+# Create a non-root user and group
+RUN useradd --create-home --shell /bin/bash appuser
+
+# Set working directory
 WORKDIR /app
 
-# Install system dependencies if needed (e.g., VBoxManage if desired — see below)
+# Give ownership of the workdir to the new user
+RUN chown appuser:appuser /app
 
-# Copy only the necessary files
-COPY vboxmanagemetrics.py ./
-COPY requirements.txt ./
+# Switch to non-root user
+USER appuser
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy only the necessary files *after* switching to the user
+COPY --chown=appuser:appuser requirements.txt ./
+COPY --chown=appuser:appuser vboxmanagemetrics.py ./
 
-# Optional: expose the port if it's a Flask server
+# Install dependencies as the appuser (assumes venv or user-site-packages ok)
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Optional: expose port
 EXPOSE 9200
 
-# Define default command to run the script
+# Run the app with the user's Python binary
 CMD ["python", "vboxmanagemetrics.py"]
